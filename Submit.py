@@ -168,7 +168,7 @@ def submit_responce(url, original_email):
 
 
 url = 'https://petition.parliament.uk/petitions/651223/signatures/new'
-email_address = 'heather.herbert.1975@gmail.com'
+email_address = 'test@gmail.com'
 
 x = range(1)
 for n in x:
