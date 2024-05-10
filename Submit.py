@@ -1,7 +1,17 @@
+import sys
+
 import requests
 import random
 import uuid
 from bs4 import BeautifulSoup
+
+
+def extract_second_page_url(response):
+    soup = BeautifulSoup(response.content, 'html.parser')
+    form = soup.find('form', {'class': 'new_signature'})
+    if form and form.has_attr('action'):
+        return f"https://petition.parliament.uk/{form['action']}"
+    return None
 
 
 def generate_random_name():
@@ -78,7 +88,6 @@ def generate_postcode():
 
 
 def submit_responce(url, original_email):
-
     # Send a GET request to the URL to obtain initial cookies and HTML content
     response = requests.get(url)
     cookies = response.cookies
@@ -88,36 +97,80 @@ def submit_responce(url, original_email):
 
     # Identify the form fields by their IDs
     signature_name = generate_random_name()
-    signature_email = modified_email = add_random_to_email(original_email)
+    signature_email = add_random_to_email(original_email)
     signature_location_code = 'GB'  # The UK
     signature_postcode = generate_postcode()
 
-    # Prepare form data
-    form_data = {
+    # Extract authenticity_token from the first page
+    authenticity_token_input = soup.find("input", {"type": "hidden", "name": "authenticity_token"})
+    if not authenticity_token_input:
+        print("Failed to find authenticity_token input field on the webpage")
+        return
+
+    authenticity_token = authenticity_token_input["value"]
+
+    # Prepare form data for the first page submission
+    form_data_first_page = {
+        'authenticity_token': authenticity_token,
+        'signature[autocorrect_domain]': '1',
+        'signature[uk_citizenship]': ['1'],
         'signature[name]': signature_name,
         'signature[email]': signature_email,
         'signature[location_code]': signature_location_code,
         'signature[postcode]': signature_postcode,
-        'signature[notify_by_email]': '1',  # 1 if checkbox should be selected for email notification
-        'signature[uk_citizenship]': '1'   # 1 if checkbox should be selected for UK citizenship
+        'signature[notify_by_email]': ['1'],
+        'move:next': 'Continue'
     }
 
-    # Send a POST request to submit the form
-    response = requests.post(url, data=form_data, cookies=cookies)
+    # Send a POST request to submit the form on the first page
+    response_first_page = requests.post(url, data=form_data_first_page, cookies=cookies)
 
-    print(f"{signature_name} - {signature_email} - {signature_postcode}")
+    print(response_first_page)
 
-    # Check if the form submission was successful
-    if response.status_code == 200:
-        print("Form submitted successfully!")
+    # Check if the form submission on the first page was successful
+    if response_first_page.status_code != 200:
+        print(f"Form submission failed on the first page with status code: {response_first_page.status_code}")
+        return
+
+    # Extract URL of the second page from the response of the first page submission
+    second_page_url = extract_second_page_url(response_first_page)
+    if not second_page_url:
+        print("Failed to extract URL of the second page")
+        return
+    soup = BeautifulSoup(response.content, "html.parser")
+    authenticity_token_input2 = soup.find("input", {"type": "hidden", "name": "authenticity_token"})
+    if not authenticity_token_input2:
+        print("Failed to find authenticity_token input field on the webpage")
+        return
+
+    authenticity_token = authenticity_token_input["value"]
+    # Prepare form data for the second page submission
+    form_data_second_page = {
+        'authenticity_token': authenticity_token,
+        'signature[name]': signature_name,
+        'signature[uk_citizenship]': '1',  # Assuming UK citizenship is selected
+        'signature[postcode]': signature_postcode,
+        'signature[location_code]': signature_location_code,
+        'signature[notify_by_email]': '1',  # Assuming notify by email is selected
+        'signature[email]': signature_email,
+        'commit': 'Yes – this is my email address'
+    }
+
+    # Send a POST request to submit the form on the second page
+    response_second_page = requests.post(second_page_url, data=form_data_second_page, cookies=response_first_page.cookies)
+
+    # Check if the form submission on the second page was successful
+    if response_second_page.status_code == 200:
+        print("Form submitted successfully on the second page!")
+        print(response_second_page.content)
     else:
-        print(f"Form submission failed with status code: {response.status_code}")
+        print(f"Form submission failed on the second page with status code: {response_second_page.status_code}")
 
 
 url = 'https://petition.parliament.uk/petitions/651223/signatures/new'
-email_address = 'Fake.Address@gmail.com'
+email_address = 'heather.herbert.1975@gmail.com'
 
-x = range(10)
+x = range(1)
 for n in x:
     submit_responce(url,email_address)
 
